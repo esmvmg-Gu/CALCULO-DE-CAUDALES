@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c3a44">
+<title>Afluente — Aforo de caudal</title>
+<style>
+  :root{
+    --ink:#0d2129;          /* deep slate text */
+    --ink-soft:#4b6470;
+    --line:#d4dde0;
+    --bg:#e9eef0;           /* instrument panel neutral */
+    --card:#ffffff;
+    --agua:#0f7d8c;         /* water teal — primary */
+    --agua-d:#0c5d68;
+    --caudal:#1b9ee0;       /* flow blue */
+    --bed:#a9774e;          /* sediment */
+    --amber:#e09020;        /* watch */
+    --danger:#d6453f;       /* alert */
+    --safe:#2f9e5e;
+    --radius:14px;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --shadow:0 1px 2px rgba(13,33,41,.06),0 8px 24px rgba(13,33,41,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--sans);color:var(--ink);background:var(--bg);
+    line-height:1.45;-webkit-text-size-adjust:100%;
+    padding-bottom:84px; /* room for tab bar */
+  }
+  /* ---------- top bar ---------- */
+  header.app{
+    position:sticky;top:0;z-index:30;
+    background:linear-gradient(180deg,#0c3a44,#0c5d68);
+    color:#eafafb;padding:calc(env(safe-area-inset-top,0) + 12px) 16px 12px;
+    box-shadow:0 2px 12px rgba(0,0,0,.18);
+  }
+  header.app .row{display:flex;align-items:center;gap:12px;max-width:900px;margin:0 auto}
+  .brandmark{flex:0 0 auto}
+  header.app h1{font-size:1.02rem;margin:0;letter-spacing:.3px;font-weight:700}
+  header.app .sub{font-size:.72rem;opacity:.8;letter-spacing:.12em;text-transform:uppercase}
+  .net{margin-left:auto;font-size:.68rem;display:flex;align-items:center;gap:6px;
+       background:rgba(255,255,255,.12);padding:5px 9px;border-radius:999px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#9fb6bc}
+  .dot.on{background:#7fe3a2}
+  /* ---------- alert banner ---------- */
+  #alertBanner{display:none;max-width:900px;margin:10px auto 0;padding:0 16px}
+  #alertBanner .inner{
+    border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;
+    font-size:.86rem;font-weight:600;box-shadow:var(--shadow)
+  }
+  .inner.lvl-watch{background:#fff5e3;color:#7a5410;border:1px solid #f0cd87}
+  .inner.lvl-alert{background:#ffe9e8;color:#8e231f;border:1px solid #f2a8a4}
+  .inner.lvl-safe{background:#e7f7ee;color:#155f37;border:1px solid #a8e0c0}
+  /* ---------- layout ---------- */
+  main{max-width:900px;margin:0 auto;padding:14px 16px 24px}
+  section.view{display:none;animation:fade .18s ease}
+  section.view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+        padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
+  .eyebrow{font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--agua);
+           font-weight:700;margin:0 0 2px}
+  h2.title{font-size:1.18rem;margin:0 0 12px;letter-spacing:-.01em}
+  h3{font-size:.95rem;margin:0 0 8px}
+  label{display:block;font-size:.78rem;font-weight:600;color:var(--ink-soft);margin:0 0 4px}
+  input,select{
+    width:100%;font:inherit;color:var(--ink);background:#f7fafb;
+    border:1px solid var(--line);border-radius:10px;padding:11px 12px;
+  }
+  input:focus,select:focus{outline:2px solid var(--agua);outline-offset:1px;border-color:var(--agua)}
+  .field{margin-bottom:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  /* ---------- buttons ---------- */
+  button{font:inherit;cursor:pointer;border:none;border-radius:11px;padding:12px 16px;
+          font-weight:700;letter-spacing:.01em;transition:transform .05s,filter .15s}
+  button:active{transform:translateY(1px)}
+  .btn-primary{background:var(--agua);color:#fff}
+  .btn-primary:hover{filter:brightness(1.06)}
+  .btn-ghost{background:#eef4f5;color:var(--agua-d)}
+  .btn-line{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn-danger{background:#fff;color:var(--danger);border:1px solid #f0c2bf}
+  .btn-row{display:flex;flex-wrap:wrap;gap:8px}
+  .btn-sm{padding:8px 11px;font-size:.8rem;border-radius:9px}
+  /* ---------- measurement table ---------- */
+  .mtable{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  .mtable th{font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);
+             text-align:left;padding:6px 6px;border-bottom:2px solid var(--line);font-weight:700}
+  .mtable td{padding:4px 4px;border-bottom:1px solid #eef2f3}
+  .mtable input{padding:9px 8px;text-align:right;font-family:var(--mono);font-size:.92rem}
+  .mtable td.idx{font-family:var(--mono);color:var(--ink-soft);font-size:.78rem;text-align:center;width:30px}
+  .mtable td.del{width:34px;text-align:center}
+  .xbtn{background:none;border:none;color:#c2ccd0;font-size:1.1rem;padding:4px 6px;cursor:pointer}
+  .xbtn:hover{color:var(--danger)}
+  /* ---------- results strip ---------- */
+  .results{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+           border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:6px}
+  .results .cell{background:#fff;padding:12px 10px;text-align:center}
+  .results .k{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+  .results .v{font-family:var(--mono);font-size:1.18rem;font-weight:700;color:var(--agua-d);margin-top:3px}
+  .results .v small{font-size:.6rem;color:var(--ink-soft);font-weight:600}
+  .results .cell.flag-alert .v{color:var(--danger)}
+  /* ---------- charts ---------- */
+  .chartwrap{width:100%;overflow:hidden;border-radius:10px}
+  svg.chart{width:100%;height:auto;display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:.78rem}
+  .legend span.sw{display:inline-block;width:13px;height:13px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+  /* ---------- history list ---------- */
+  .hist-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eef2f3}
+  .hist-item:last-child{border-bottom:none}
+  .hist-item input[type=checkbox]{width:18px;height:18px;flex:0 0 auto}
+  .hist-meta{flex:1;min-width:0}
+  .hist-meta .nm{font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hist-meta .dt{font-size:.74rem;color:var(--ink-soft)}
+  .pill{font-family:var(--mono);font-size:.82rem;font-weight:700;color:var(--agua-d);white-space:nowrap}
+  .pill.over{color:var(--danger)}
+  .badge{font-size:.6rem;padding:2px 6px;border-radius:6px;font-weight:700}
+  .badge.synced{background:#e7f7ee;color:var(--safe)}
+  .badge.local{background:#fdf2e1;color:#9a6712}
+  .empty{color:var(--ink-soft);font-size:.86rem;text-align:center;padding:18px 6px}
+  .note{font-size:.78rem;color:var(--ink-soft);line-height:1.5}
+  .note code{background:#eef4f5;padding:1px 5px;border-radius:5px;font-family:var(--mono);font-size:.85em}
+  a{color:var(--agua-d)}
+  /* ---------- tab bar ---------- */
+  nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;
+           background:rgba(255,255,255,.97);backdrop-filter:blur(8px);
+           border-top:1px solid var(--line);padding:6px 4px calc(env(safe-area-inset-bottom,0) + 6px)}
+  nav.tabs button{flex:1;background:none;border:none;border-radius:10px;padding:7px 2px;
+                  color:var(--ink-soft);font-weight:600;display:flex;flex-direction:column;
+                  align-items:center;gap:3px;font-size:.62rem;letter-spacing:.02em}
+  nav.tabs button .ic{width:22px;height:22px}
+  nav.tabs button.active{color:var(--agua)}
+  nav.tabs button.active .ic{stroke:var(--agua)}
+  .ic{stroke:#7e949b;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);
+         background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:.84rem;
+         font-weight:600;box-shadow:var(--shadow);opacity:0;transition:opacity .2s;z-index:60;pointer-events:none}
+  .toast.show{opacity:1}
+  .ret-line{display:flex;justify-content:space-between;font-size:.8rem;padding:5px 0;border-bottom:1px dashed #e3e9ea}
+  .ret-line .yr{color:var(--ink-soft)}
+  .ret-line .val{font-family:var(--mono);font-weight:700}
+  @media(min-width:620px){ .results .v{font-size:1.3rem} }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="row">
+    <svg class="brandmark" width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+      <path d="M3 19c3 0 3-3 6-3s3 3 6 3 3-3 6-3 3 3 6 3" stroke="#7fe3a2" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M3 24c3 0 3-3 6-3s3 3 6 3 3-3 6-3 3 3 6 3" stroke="#bfeff3" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <circle cx="15" cy="9" r="3.4" stroke="#eafafb" stroke-width="2" fill="none"/>
+    </svg>
+    <div>
+      <div class="sub">Aforo de caudal</div>
+      <h1>Afluente</h1>
+    </div>
+    <div class="net"><span class="dot" id="netDot"></span><span id="netTxt">sin conexión</span></div>
+  </div>
+</header>
+
+<div id="alertBanner"><div class="inner" id="alertInner"></div></div>
+
+<main>
+  <!-- ============ CAPTURA ============ -->
+  <section class="view active" id="v-captura">
+    <div class="card">
+      <p class="eyebrow">Medición de campo</p>
+      <h2 class="title">Captura de datos</h2>
+      <div class="grid2">
+        <div class="field"><label for="lugar">Arroyo / lugar</label>
+          <input id="lugar" placeholder="p. ej. Río Panajachel" autocomplete="off"></div>
+        <div class="field"><label for="fecha">Fecha y hora</label>
+          <input id="fecha" type="datetime-local"></div>
+      </div>
+      <div class="field"><label for="nivel">Nivel / altura de regla (cm)
+        <span style="font-weight:500;color:var(--ink-soft)">— opcional, alimenta la curva de gasto</span></label>
+        <input id="nivel" inputmode="decimal" placeholder="p. ej. 38" autocomplete="off"></div>
+    </div>
+
+    <div class="card">
+      <h3>Secciones a lo ancho del cauce</h3>
+      <p class="note" style="margin:-2px 0 10px">
+        Mide cada vertical de orilla a orilla. <b>Velocidad @ 40%</b> = velocidad tomada al 40% de la
+        profundidad desde el fondo (método de 0.6); ya equivale a la velocidad media de esa vertical.
+      </p>
+      <div style="overflow-x:auto">
+      <table class="mtable">
+        <thead><tr>
+          <th class="idx">#</th><th>Distancia (m)</th><th>Profundidad (cm)</th>
+          <th>Veloc. @40% (m/s)</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn-ghost btn-sm" id="addRow">+ Agregar sección</button>
+        <button class="btn-line btn-sm" id="clearRows">Vaciar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Resultados (cálculo automático)</h3>
+      <div class="results" id="results">
+        <div class="cell"><div class="k">Ancho mojado</div><div class="v" id="rWidth">—</div></div>
+        <div class="cell"><div class="k">Área</div><div class="v" id="rArea">—</div></div>
+        <div class="cell"><div class="k">Veloc. media</div><div class="v" id="rVel">—</div></div>
+        <div class="cell" id="cellQ"><div class="k">Caudal Q</div><div class="v" id="rQ">—</div></div>
+      </div>
+      <p class="note" style="margin-top:10px">Método de sección media (mid-section). Q = Σ (ancho parcial × profundidad × velocidad).</p>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn-primary" id="saveSession" style="flex:1">Guardar medición</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PERFIL ============ -->
+  <section class="view" id="v-perfil">
+    <div class="card">
+      <p class="eyebrow">Sección transversal</p>
+      <h2 class="title">Perfil del cauce</h2>
+      <div class="chartwrap"><div id="profileChart"></div></div>
+      <p class="note" style="margin-top:10px">Profundidad (cm) frente a distancia (m). El número junto a cada punto es la velocidad medida en m/s.</p>
+    </div>
+  </section>
+
+  <!-- ============ HISTÓRICO ============ -->
+  <section class="view" id="v-historico">
+    <div class="card">
+      <p class="eyebrow">Comparación</p>
+      <h2 class="title">Mediciones históricas</h2>
+      <p class="note" style="margin-bottom:10px">Selecciona dos o más fechas para superponer sus perfiles y comparar el caudal en el tiempo.</p>
+      <div id="histList"><div class="empty">Aún no hay mediciones guardadas.</div></div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn-line btn-sm" id="selAll">Seleccionar todo</button>
+        <button class="btn-line btn-sm" id="exportCsv">Exportar CSV</button>
+      </div>
+    </div>
+    <div class="card" id="overlayCard" style="display:none">
+      <h3>Perfiles superpuestos</h3>
+      <div class="chartwrap"><div id="overlayChart"></div></div>
+      <div class="legend" id="overlayLegend"></div>
+    </div>
+    <div class="card" id="qtimeCard" style="display:none">
+      <h3>Caudal en el tiempo</h3>
+      <div class="chartwrap"><div id="qtimeChart"></div></div>
+    </div>
+    <div class="card" id="ratingCard">
+      <h3>Curva de gasto (nivel → caudal)</h3>
+      <p class="note" style="margin-bottom:10px">Con varios aforos que tengan <b>nivel de regla</b>, se ajusta una curva
+        Q = a·hᵇ. Después solo lees la regla y estimas el caudal sin medir velocidad.</p>
+      <div class="chartwrap"><div id="ratingChart"><div class="empty">Guarda ≥2 mediciones con nivel para construir la curva.</div></div></div>
+      <div id="ratingFit" class="note" style="margin-top:8px"></div>
+      <div class="grid2" id="predictBox" style="display:none;margin-top:8px">
+        <div class="field"><label for="predNivel">Nivel leído (cm)</label>
+          <input id="predNivel" inputmode="decimal" placeholder="p. ej. 52"></div>
+        <div class="field"><label>Caudal estimado</label>
+          <div class="results" style="grid-template-columns:1fr"><div class="cell"><div class="v" id="predQ">—</div></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GEOGLOWS ============ -->
+  <section class="view" id="v-geo">
+    <div class="card">
+      <p class="eyebrow">Modelo global · GEOGLOWS</p>
+      <h2 class="title">Pronóstico del río</h2>
+      <p class="note" style="margin-bottom:10px">
+        Compara tu aforo con el caudal modelado del tramo de río. Abre el visor, toca tu río y copia su
+        <b>River ID</b> (LINKNO, 9 dígitos).
+      </p>
+      <div class="btn-row" style="margin-bottom:12px">
+        <button class="btn-ghost btn-sm" id="openViewer">Abrir HydroViewer ↗</button>
+      </div>
+      <div class="field"><label for="riverSelect">Tramo de río guardado</label>
+        <select id="riverSelect"></select></div>
+      <div class="grid2">
+        <div class="field"><label for="riverId">River ID (LINKNO)</label>
+          <input id="riverId" inputmode="numeric" placeholder="p. ej. 760021455"></div>
+        <div class="field"><label>&nbsp;</label>
+          <button class="btn-primary" id="loadGeo" style="width:100%">Cargar pronóstico</button></div>
+      </div>
+      <div id="geoStatus" class="note"></div>
+    </div>
+    <div class="card" id="geoCard" style="display:none">
+      <h3>Pronóstico de caudal (15 días)</h3>
+      <div class="chartwrap"><div id="geoChart"></div></div>
+      <div class="legend" id="geoLegend"></div>
+    </div>
+    <div class="card" id="retCard" style="display:none">
+      <h3>Umbrales de período de retorno</h3>
+      <div id="retList"></div>
+      <p class="note" style="margin-top:8px">Si el pronóstico supera el umbral de 2 años, suele indicar riesgo de desbordamiento.</p>
+    </div>
+    <div class="card" id="calibCard">
+      <h3>Calibrar con tus aforos</h3>
+      <p class="note" style="margin-bottom:10px">Compara tu caudal medido contra el modelo histórico de GEOGLOWS en las mismas fechas
+        y calcula un factor de sesgo local, para que el pronóstico global sea confiable en tu arroyo.</p>
+      <button class="btn-ghost btn-sm" id="calibBtn">Calcular factor de sesgo</button>
+      <div id="calibOut" class="note" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- ============ AJUSTES ============ -->
+  <section class="view" id="v-ajustes">
+    <div class="card">
+      <p class="eyebrow">Alertas</p>
+      <h2 class="title">Umbral de caudal</h2>
+      <div class="field"><label for="umbral">Avisar cuando Q ≥ (m³/s)</label>
+        <input id="umbral" inputmode="decimal" placeholder="p. ej. 12.5"></div>
+      <p class="note">La alerta aparece arriba cuando una medición guardada o el pronóstico GEOGLOWS supera este valor.</p>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Sincronización</p>
+      <h2 class="title">Google Sheets</h2>
+      <div class="field"><label for="scriptUrl">URL del Web App (Apps Script)</label>
+        <input id="scriptUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off"></div>
+      <div class="btn-row">
+        <button class="btn-primary" id="syncNow" style="flex:1">Sincronizar pendientes</button>
+        <button class="btn-line" id="testConn">Probar</button>
+      </div>
+      <p class="note" id="syncStatus" style="margin-top:10px"></p>
+      <p class="note" style="margin-top:6px">
+        URL preconfigurada: esta app ya viene apuntando al backend de Afluente. Las mediciones se
+        envían a tu hoja de cálculo <b>automáticamente</b> al guardar, al abrir la app y cuando
+        vuelve la conexión. Funciona offline: lo capturado sin internet se sube en cuanto reconectes.
+        Solo cambia este campo si tienes una implementación propia de Apps Script.
+      </p>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn-ghost btn-sm" id="resetUrl">Restaurar URL predeterminada</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Datos locales</h3>
+      <p class="note" style="margin-bottom:10px" id="storeStat"></p>
+      <div class="btn-row">
+        <button class="btn-line btn-sm" id="pullSheets">Traer de Sheets</button>
+        <button class="btn-danger btn-sm" id="wipe">Borrar todo lo local</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Demo</p>
+      <h3>Datos de prueba</h3>
+      <p class="note" style="margin-bottom:10px">
+        Carga un aforo de ejemplo (Río Quiscab, sección bajo el puente) o genera 6 mediciones
+        históricas para probar el perfil, la curva caudal-nivel y la sincronización con Sheets.
+      </p>
+      <div class="btn-row">
+        <button class="btn-line btn-sm" id="fillDemo">Llenar formulario</button>
+        <button class="btn-line btn-sm" id="seedHistory">Generar histórico (6)</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button data-go="captura" class="active">
+    <svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Captura</button>
+  <button data-go="perfil">
+    <svg class="ic" viewBox="0 0 24 24"><path d="M3 6l5 4 4-3 4 5 5-4M3 18h18"/></svg>Perfil</button>
+  <button data-go="historico">
+    <svg class="ic" viewBox="0 0 24 24"><path d="M4 19V5M4 16l5-4 4 3 7-7"/></svg>Histórico</button>
+  <button data-go="geo">
+    <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v18M5 8c0 0 3 2 7 2s7-2 7-2M5 16c0 0 3-2 7-2s7 2 7 2"/></svg>GEOGLOWS</button>
+  <button data-go="ajustes">
+    <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Ajustes</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Afluente — aforo de caudal. 100% offline salvo GEOGLOWS/sync.
+   ============================================================ */
+const VIEWER_URL = "https://hydroviewer.geoglows.org/#lon=-91.17&lat=14.76&zoom=12.33&definition=";
+const GEO_API = "https://geoglows.ecmwf.int/api/v2/"; // referencia (el proxy lo usa)
+
+// Backend Apps Script (preconfigurado). Sirve para sincronizar a Sheets y como proxy GEOGLOWS.
+// Si cambias la implementación, actualiza esta URL o sobreescríbela desde la pestaña Ajustes.
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIvY-Ozr2yXTM9qr9XeL6199H4frFY3VZjVHZWiYAlfQJSLSeycfAC5CDW5nc36eBA/exec";
+
+const LS = {
+  sessions:"afluente.sessions.v1",
+  settings:"afluente.settings.v1",
+  draft:"afluente.draft.v1"
+};
+const COLORS = ["#0f7d8c","#d6453f","#e09020","#5b6cc9","#2f9e5e","#9a4fc0","#c2185b","#0277bd"];
+
+let state = {
+  rows: [],            // [{d,p,v}]
+  sessions: [],        // guardadas
+  settings: { scriptUrl: SCRIPT_URL, umbral:"", riverId:"", bias:null, rivers:[] }
+};
+
+/* ---------- persistencia ---------- */
+function load(){
+  try{ state.sessions = JSON.parse(localStorage.getItem(LS.sessions)) || []; }catch(e){ state.sessions=[]; }
+  try{ state.settings = Object.assign(state.settings, JSON.parse(localStorage.getItem(LS.settings))||{}); }catch(e){}
+  // si una versión anterior guardó scriptUrl vacío, restaura el predeterminado
+  if(!state.settings.scriptUrl || !state.settings.scriptUrl.trim()){
+    state.settings.scriptUrl = SCRIPT_URL;
+    saveSettings();
+  }
+}
+function saveSessions(){ try{ localStorage.setItem(LS.sessions, JSON.stringify(state.sessions)); }catch(e){ toast("No se pudo guardar localmente"); } }
+function saveSettings(){ try{ localStorage.setItem(LS.settings, JSON.stringify(state.settings)); }catch(e){} }
+function saveDraft(){
+  try{ localStorage.setItem(LS.draft, JSON.stringify({
+    lugar:$("#lugar").value, fecha:$("#fecha").value, nivel:$("#nivel").value, rows:state.rows
+  })); }catch(e){}
+}
+function loadDraft(){
+  try{
+    const d=JSON.parse(localStorage.getItem(LS.draft));
+    if(d){ if(d.lugar) $("#lugar").value=d.lugar; if(d.fecha) $("#fecha").value=d.fecha;
+      if(d.nivel!=null) $("#nivel").value=d.nivel;
+      if(Array.isArray(d.rows)&&d.rows.length) state.rows=d.rows; }
+  }catch(e){}
+}
+
+/* ---------- utilidades ---------- */
+const $ = s => document.querySelector(s);
+function num(x){ const n = parseFloat(String(x).replace(",",".")); return isFinite(n)? n : NaN; }
+function fmt(n,d=2){ if(!isFinite(n)) return "—"; return n.toFixed(d); }
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
+function nowLocalISO(){ const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); }
+function prettyDate(iso){ if(!iso) return "(sin fecha)"; const d=new Date(iso); if(isNaN(d)) return iso; return d.toLocaleString("es",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
+
+/* ============================================================
+   CÁLCULO DE CAUDAL — método de sección media (mid-section)
+   distancia en m, profundidad en cm, velocidad en m/s
+   ============================================================ */
+function computeDischarge(rows){
+  const pts = rows
+    .map(r=>({ x:num(r.d), depth:num(r.p)/100, v:num(r.v) }))
+    .filter(p=>isFinite(p.x) && isFinite(p.depth) && isFinite(p.v))
+    .sort((a,b)=>a.x-b.x);
+  if(pts.length < 2) return { Q:NaN, area:NaN, vmean:NaN, width:NaN, n:pts.length, pts };
+  let Q=0, area=0;
+  const n = pts.length;
+  for(let i=0;i<n;i++){
+    const left  = (i===0)   ? pts[0].x       : (pts[i-1].x + pts[i].x)/2;
+    const right = (i===n-1) ? pts[n-1].x     : (pts[i].x + pts[i+1].x)/2;
+    const w = right - left;                 // ancho parcial de la vertical
+    const a = w * pts[i].depth;             // área parcial
+    area += a;
+    Q += a * pts[i].v;                      // caudal parcial
+  }
+  const width = pts[n-1].x - pts[0].x;
+  const vmean = area>0 ? Q/area : NaN;
+  return { Q, area, vmean, width, n, pts };
+}
+
+/* ============================================================
+   TABLA DE CAPTURA
+   ============================================================ */
+function blankRow(){ return {d:"",p:"",v:""}; }
+function renderRows(){
+  const tb = $("#rows"); tb.innerHTML="";
+  state.rows.forEach((r,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML =
+      `<td class="idx">${i+1}</td>`+
+      `<td><input inputmode="decimal" data-f="d" value="${r.d}"></td>`+
+      `<td><input inputmode="decimal" data-f="p" value="${r.p}"></td>`+
+      `<td><input inputmode="decimal" data-f="v" value="${r.v}"></td>`+
+      `<td class="del"><button class="xbtn" aria-label="Eliminar">×</button></td>`;
+    tr.querySelectorAll("input").forEach(inp=>{
+      inp.addEventListener("input",()=>{ state.rows[i][inp.dataset.f]=inp.value; recompute(); });
+    });
+    tr.querySelector(".xbtn").addEventListener("click",()=>{
+      state.rows.splice(i,1); if(state.rows.length===0) state.rows.push(blankRow());
+      renderRows(); recompute();
+    });
+    tb.appendChild(tr);
+  });
+}
+function recompute(){
+  const res = computeDischarge(state.rows);
+  $("#rWidth").innerHTML = isFinite(res.width)? fmt(res.width,2)+' <small>m</small>' : "—";
+  $("#rArea").innerHTML  = isFinite(res.area)?  fmt(res.area,3)+' <small>m²</small>' : "—";
+  $("#rVel").innerHTML   = isFinite(res.vmean)? fmt(res.vmean,3)+' <small>m/s</small>' : "—";
+  $("#rQ").innerHTML     = isFinite(res.Q)?     fmt(res.Q,3)+' <small>m³/s</small>' : "—";
+  const umbral = num(state.settings.umbral);
+  const over = isFinite(res.Q) && isFinite(umbral) && res.Q >= umbral;
+  $("#cellQ").classList.toggle("flag-alert", over);
+  renderProfile(res, $("#profileChart"));
+  refreshAlert();
+  saveDraft();
+  return res;
+}
+
+/* ============================================================
+   GRÁFICO SVG: PERFIL DEL CAUCE
+   ============================================================ */
+function linScale(d0,d1,p0,p1){ const m=(p1-p0)/((d1-d0)||1); return v=>p0+(v-d0)*m; }
+function svgEl(W,H){ return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">`; }
+
+function renderProfile(res, mount){
+  const W=700,H=360, padL=52,padR=18,padT=22,padB=40;
+  if(!res || res.pts.length<2){
+    mount.innerHTML = `<div class="empty">Agrega al menos 2 secciones con datos para ver el perfil.</div>`;
+    return;
+  }
+  const pts=res.pts;
+  const xMin=pts[0].x, xMax=pts[pts.length-1].x;
+  const dMax=Math.max(...pts.map(p=>p.depth));
+  const sx=linScale(xMin,xMax,padL,W-padR);
+  const sy=linScale(0,Math.max(dMax,0.01),padT,H-padB); // 0 arriba
+  let s=svgEl(W,H);
+  // grid horizontal (profundidad)
+  const dTicks=4;
+  for(let i=0;i<=dTicks;i++){
+    const dv=(dMax)*(i/dTicks), y=sy(dv);
+    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#eef2f3"/>`;
+    s+=`<text x="${padL-8}" y="${(y+4).toFixed(1)}" font-size="11" text-anchor="end" fill="#7e949b" font-family="ui-monospace,monospace">${(dv*100).toFixed(0)}</text>`;
+  }
+  // water polygon
+  let poly=`${sx(xMin).toFixed(1)},${sy(0).toFixed(1)} `;
+  pts.forEach(p=>{ poly+=`${sx(p.x).toFixed(1)},${sy(p.depth).toFixed(1)} `; });
+  poly+=`${sx(xMax).toFixed(1)},${sy(0).toFixed(1)}`;
+  s+=`<polygon points="${poly}" fill="rgba(27,158,224,.18)" stroke="none"/>`;
+  // bed line
+  let bed="";
+  pts.forEach((p,i)=>{ bed+=(i?"L":"M")+sx(p.x).toFixed(1)+" "+sy(p.depth).toFixed(1)+" "; });
+  s+=`<path d="${bed}" fill="none" stroke="#a9774e" stroke-width="2.4" stroke-linejoin="round"/>`;
+  // surface line
+  s+=`<line x1="${sx(xMin).toFixed(1)}" y1="${sy(0).toFixed(1)}" x2="${sx(xMax).toFixed(1)}" y2="${sy(0).toFixed(1)}" stroke="#1b9ee0" stroke-width="2"/>`;
+  // markers + velocity labels
+  pts.forEach(p=>{
+    const X=sx(p.x), Y=sy(p.depth);
+    s+=`<circle cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="3.4" fill="#0c5d68"/>`;
+    s+=`<text x="${X.toFixed(1)}" y="${(Y+15).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#0c5d68" font-family="ui-monospace,monospace">${fmt(p.v,2)}</text>`;
+    s+=`<text x="${X.toFixed(1)}" y="${(H-padB+16).toFixed(1)}" font-size="11" text-anchor="middle" fill="#7e949b" font-family="ui-monospace,monospace">${fmt(p.x,1)}</text>`;
+  });
+  // axis labels
+  s+=`<text x="${(padL-40)}" y="14" font-size="10.5" fill="#4b6470" font-weight="700">Prof. cm</text>`;
+  s+=`<text x="${W-padR}" y="${H-6}" font-size="10.5" fill="#4b6470" text-anchor="end" font-weight="700">Distancia (m)</text>`;
+  s+=`</svg>`;
+  mount.innerHTML=s;
+}
+
+/* ============================================================
+   GUARDAR / HISTÓRICO
+   ============================================================ */
+function snapshot(){
+  const res=computeDischarge(state.rows);
+  const umbral=num(state.settings.umbral);
+  return {
+    id:"s"+Date.now().toString(36),
+    lugar:$("#lugar").value.trim()||"(sin nombre)",
+    fecha:$("#fecha").value||nowLocalISO(),
+    nivel: $("#nivel").value!=="" ? num($("#nivel").value) : null,
+    rows: state.rows.map(r=>({d:r.d,p:r.p,v:r.v})).filter(r=>r.d!==""||r.p!==""||r.v!==""),
+    calc:{ Q:res.Q, area:res.area, vmean:res.vmean, width:res.width },
+    umbral: isFinite(umbral)?umbral:null,
+    alerta: isFinite(res.Q)&&isFinite(umbral)&&res.Q>=umbral,
+    synced:false,
+    createdAt:new Date().toISOString()
+  };
+}
+function saveCurrentSession(){
+  const res=computeDischarge(state.rows);
+  if(!isFinite(res.Q)){ toast("Agrega ≥2 secciones válidas antes de guardar"); return; }
+  state.sessions.unshift(snapshot());
+  saveSessions(); renderHistory(); renderRating();
+  toast("Medición guardada"); refreshAlert();
+  autoSync(); // envío inmediato a Sheets si hay conexión
+}
+function renderHistory(){
+  const wrap=$("#histList");
+  $("#storeStat").textContent = `${state.sessions.length} medición(es) guardada(s), `+
+    `${state.sessions.filter(s=>!s.synced).length} sin sincronizar.`;
+  if(state.sessions.length===0){ wrap.innerHTML=`<div class="empty">Aún no hay mediciones guardadas.</div>`; updateComparison(); return; }
+  wrap.innerHTML="";
+  state.sessions.forEach((s,i)=>{
+    const over=s.umbral!=null && isFinite(s.calc.Q) && s.calc.Q>=s.umbral;
+    const row=document.createElement("div"); row.className="hist-item";
+    row.innerHTML=
+      `<input type="checkbox" data-i="${i}">`+
+      `<span class="sw" style="background:${COLORS[i%COLORS.length]};display:inline-block;width:11px;height:11px;border-radius:3px;flex:0 0 auto"></span>`+
+      `<div class="hist-meta"><div class="nm">${escapeHtml(s.lugar)}</div>`+
+        `<div class="dt">${prettyDate(s.fecha)}${s.nivel!=null?` · regla ${fmt(s.nivel,0)} cm`:""}</div></div>`+
+      `<span class="badge ${s.synced?"synced":"local"}">${s.synced?"en Sheets":"local"}</span>`+
+      `<span class="pill ${over?"over":""}">${fmt(s.calc.Q,2)} m³/s</span>`+
+      `<button class="xbtn" data-del="${i}" aria-label="Eliminar">×</button>`;
+    row.querySelector("[type=checkbox]").addEventListener("change",updateComparison);
+    row.querySelector("[data-del]").addEventListener("click",()=>{
+      if(confirm("¿Eliminar esta medición?")){ state.sessions.splice(i,1); saveSessions(); renderHistory(); }
+    });
+    wrap.appendChild(row);
+  });
+  updateComparison();
+  renderRating();
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+function selectedSessions(){
+  return [...document.querySelectorAll("#histList input[type=checkbox]")]
+    .filter(c=>c.checked).map(c=>state.sessions[+c.dataset.i]);
+}
+function updateComparison(){
+  const sel=selectedSessions();
+  // overlay perfiles
+  const oc=$("#overlayCard");
+  if(sel.length>=1){
+    oc.style.display="block";
+    renderOverlay(sel,$("#overlayChart"),$("#overlayLegend"));
+  } else oc.style.display="none";
+  // Q en el tiempo (usa todas si nada seleccionado, o las seleccionadas)
+  const setForQ = sel.length>=2 ? sel : state.sessions;
+  const qc=$("#qtimeCard");
+  if(setForQ.length>=2){ qc.style.display="block"; renderQtime(setForQ,$("#qtimeChart")); }
+  else qc.style.display="none";
+}
+function renderOverlay(sel,mount,legend){
+  const W=700,H=360,padL=52,padR=18,padT=22,padB=40;
+  const all=[];
+  sel.forEach(s=>{ const r=computeDischarge(s.rows); if(r.pts.length>=2) all.push({s,pts:r.pts}); });
+  if(all.length===0){ mount.innerHTML=`<div class="empty">Selecciona mediciones con ≥2 secciones.</div>`; legend.innerHTML=""; return; }
+  const xMin=Math.min(...all.flatMap(a=>a.pts.map(p=>p.x)));
+  const xMax=Math.max(...all.flatMap(a=>a.pts.map(p=>p.x)));
+  const dMax=Math.max(...all.flatMap(a=>a.pts.map(p=>p.depth)),0.01);
+  const sx=linScale(xMin,xMax,padL,W-padR), sy=linScale(0,dMax,padT,H-padB);
+  let s=svgEl(W,H);
+  for(let i=0;i<=4;i++){ const dv=dMax*i/4,y=sy(dv);
+    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#eef2f3"/>`;
+    s+=`<text x="${padL-8}" y="${(y+4).toFixed(1)}" font-size="11" text-anchor="end" fill="#7e949b" font-family="ui-monospace,monospace">${(dv*100).toFixed(0)}</text>`; }
+  s+=`<line x1="${sx(xMin).toFixed(1)}" y1="${sy(0).toFixed(1)}" x2="${sx(xMax).toFixed(1)}" y2="${sy(0).toFixed(1)}" stroke="#1b9ee0" stroke-width="1.6"/>`;
+  legend.innerHTML="";
+  all.forEach((a,k)=>{
+    const idx=state.sessions.indexOf(a.s); const col=COLORS[(idx<0?k:idx)%COLORS.length];
+    let path=""; a.pts.forEach((p,i)=>{ path+=(i?"L":"M")+sx(p.x).toFixed(1)+" "+sy(p.depth).toFixed(1)+" "; });
+    s+=`<path d="${path}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round"/>`;
+    a.pts.forEach(p=>{ s+=`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.depth).toFixed(1)}" r="2.6" fill="${col}"/>`; });
+    legend.innerHTML+=`<span><span class="sw" style="background:${col}"></span>${escapeHtml(a.s.lugar)} · ${prettyDate(a.s.fecha)}</span>`;
+  });
+  s+=`<text x="${W-padR}" y="${H-6}" font-size="10.5" fill="#4b6470" text-anchor="end" font-weight="700">Distancia (m)</text>`;
+  s+=`</svg>`; mount.innerHTML=s;
+}
+function renderQtime(sel,mount){
+  const W=700,H=320,padL=52,padR=18,padT=22,padB=54;
+  const data=sel.map(s=>({s,Q:s.calc.Q,t:new Date(s.fecha).getTime()}))
+    .filter(d=>isFinite(d.Q)).sort((a,b)=>a.t-b.t);
+  if(data.length<2){ mount.innerHTML=`<div class="empty">Se necesitan ≥2 mediciones con caudal.</div>`; return; }
+  const qMaxData=Math.max(...data.map(d=>d.Q));
+  const umbral=num(state.settings.umbral);
+  const qMax=Math.max(qMaxData, isFinite(umbral)?umbral:0)*1.12 || 1;
+  const sy=linScale(0,qMax,H-padB,padT);
+  const n=data.length, slot=(W-padL-padR)/n, bw=Math.min(slot*0.55,46);
+  let s=svgEl(W,H);
+  for(let i=0;i<=4;i++){ const qv=qMax*i/4,y=sy(qv);
+    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#eef2f3"/>`;
+    s+=`<text x="${padL-8}" y="${(y+4).toFixed(1)}" font-size="11" text-anchor="end" fill="#7e949b" font-family="ui-monospace,monospace">${qv.toFixed(1)}</text>`; }
+  data.forEach((d,i)=>{
+    const cx=padL+slot*(i+0.5), y=sy(d.Q), h=(H-padB)-y;
+    const over=isFinite(umbral)&&d.Q>=umbral;
+    s+=`<rect x="${(cx-bw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h,0).toFixed(1)}" rx="4" fill="${over?'#d6453f':'#0f7d8c'}"/>`;
+    s+=`<text x="${cx.toFixed(1)}" y="${(y-6).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#0c5d68" font-family="ui-monospace,monospace" font-weight="700">${fmt(d.Q,1)}</text>`;
+    const lbl=new Date(d.t).toLocaleDateString("es",{day:"2-digit",month:"2-digit"});
+    s+=`<text x="${cx.toFixed(1)}" y="${(H-padB+16).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#7e949b" font-family="ui-monospace,monospace">${lbl}</text>`;
+  });
+  if(isFinite(umbral)){ const y=sy(umbral);
+    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#d6453f" stroke-width="1.6" stroke-dasharray="6 4"/>`;
+    s+=`<text x="${W-padR}" y="${(y-5).toFixed(1)}" font-size="10.5" text-anchor="end" fill="#d6453f" font-weight="700">umbral ${fmt(umbral,1)}</text>`; }
+  s+=`<text x="${(padL-40)}" y="14" font-size="10.5" fill="#4b6470" font-weight="700">Q m³/s</text>`;
+  s+=`</svg>`; mount.innerHTML=s;
+}
+
+/* ============================================================
+   CURVA DE GASTO (rating curve)  Q = a · h^b   (ajuste log-log)
+   ============================================================ */
+let ratingFit=null; // {a,b,r2}
+function fitPower(points){
+  const pts=points.filter(p=>p.h>0 && p.Q>0);
+  if(pts.length<2) return null;
+  let n=pts.length, sx=0,sy=0,sxx=0,sxy=0;
+  pts.forEach(p=>{ const X=Math.log(p.h), Y=Math.log(p.Q); sx+=X;sy+=Y;sxx+=X*X;sxy+=X*Y; });
+  const denom=(n*sxx-sx*sx); if(denom===0) return null;
+  const b=(n*sxy-sx*sy)/denom;
+  const lna=(sy-b*sx)/n, a=Math.exp(lna);
+  let ssRes=0,ssTot=0,ymean=sy/n;
+  pts.forEach(p=>{ const Y=Math.log(p.Q), Yh=lna+b*Math.log(p.h); ssRes+=(Y-Yh)**2; ssTot+=(Y-ymean)**2; });
+  const r2 = ssTot>0 ? 1-ssRes/ssTot : 1;
+  return {a,b,r2,n};
+}
+function renderRating(){
+  const mount=$("#ratingChart"), fitEl=$("#ratingFit"), box=$("#predictBox");
+  const pts=state.sessions
+    .filter(s=>s.nivel!=null && isFinite(s.calc.Q) && s.calc.Q>0 && s.nivel>0)
+    .map(s=>({h:s.nivel, Q:s.calc.Q}));
+  ratingFit=fitPower(pts);
+  if(!ratingFit){
+    mount.innerHTML=`<div class="empty">Guarda ≥2 mediciones con nivel de regla para construir la curva.</div>`;
+    fitEl.textContent=""; box.style.display="none"; return;
+  }
+  box.style.display="grid";
+  fitEl.innerHTML=`Ajuste: <b>Q = ${fmt(ratingFit.a,4)} · h<sup>${fmt(ratingFit.b,3)}</sup></b> (h en cm) · R² = ${fmt(ratingFit.r2,3)} · ${ratingFit.n} puntos`;
+  const W=700,H=320,padL=52,padR=18,padT=22,padB=46;
+  const hMax=Math.max(...pts.map(p=>p.h))*1.1, hMin=0;
+  const qMax=Math.max(...pts.map(p=>p.Q))*1.1, qMin=0;
+  const sx=linScale(hMin,hMax,padL,W-padR), sy=linScale(qMin,qMax,H-padB,padT);
+  let s=svgEl(W,H);
+  for(let i=0;i<=4;i++){ const qv=qMax*i/4,y=sy(qv);
+    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#eef2f3"/>`;
+    s+=`<text x="${padL-8}" y="${(y+4).toFixed(1)}" font-size="11" text-anchor="end" fill="#7e949b" font-family="ui-monospace,monospace">${qv.toFixed(1)}</text>`; }
+  let path="";
+  for(let i=0;i<=60;i++){ const h=hMin+(hMax-hMin)*i/60; const q=ratingFit.a*Math.pow(Math.max(h,0.001),ratingFit.b);
+    path+=(i?"L":"M")+sx(h).toFixed(1)+" "+sy(Math.min(q,qMax*1.5)).toFixed(1)+" "; }
+  s+=`<path d="${path}" fill="none" stroke="#0f7d8c" stroke-width="2.4"/>`;
+  pts.forEach(p=>{ s+=`<circle cx="${sx(p.h).toFixed(1)}" cy="${sy(p.Q).toFixed(1)}" r="4" fill="#d6453f"/>`; });
+  [0,0.5,1].forEach(f=>{ const h=hMin+(hMax-hMin)*f;
+    s+=`<text x="${sx(h).toFixed(1)}" y="${(H-padB+16).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#7e949b" font-family="ui-monospace,monospace">${h.toFixed(0)}</text>`; });
+  s+=`<text x="${(padL-40)}" y="14" font-size="10.5" fill="#4b6470" font-weight="700">Q m³/s</text>`;
+  s+=`<text x="${W-padR}" y="${H-6}" font-size="10.5" fill="#4b6470" text-anchor="end" font-weight="700">Nivel regla (cm)</text>`;
+  s+=`</svg>`; mount.innerHTML=s;
+  predictQ();
+}
+function predictQ(){
+  const out=$("#predQ"); const h=num($("#predNivel").value);
+  if(!ratingFit || !isFinite(h) || h<=0){ out.innerHTML="—"; return; }
+  const q=ratingFit.a*Math.pow(h,ratingFit.b);
+  const umbral=num(state.settings.umbral);
+  const over=isFinite(umbral)&&q>=umbral;
+  out.innerHTML=`${fmt(q,2)} <small>m³/s</small>`+(over?` <span style="color:var(--danger);font-size:.7rem">⚠ sobre umbral</span>`:"");
+}
+
+/* ============================================================
+   ALERTAS
+   ============================================================ */
+let lastForecastPeak=null, lastReturn2=null, lastReturnPeriods=[];
+function rpExceed(peak){ // devuelve el mayor período de retorno superado
+  let hit=null; lastReturnPeriods.forEach(r=>{ if(peak>=r.val && (!hit||r.yr>hit.yr)) hit=r; }); return hit;
+}
+function refreshAlert(){
+  const umbral=num(state.settings.umbral);
+  const banner=$("#alertBanner"), inner=$("#alertInner");
+  const msgs=[]; let sev=0; // 0 ninguno · 1 vigilancia · 2 alerta · 3 peligro
+  const lvlName=["","Vigilancia","Alerta","Peligro"];
+  const lvlClass=["","watch","alert","alert"];
+
+  // 1) caudal medido ahora (o estimado por la curva si hay nivel)
+  let cur=computeDischarge(state.rows).Q;
+  if(!isFinite(cur) && ratingFit){ const h=num($("#nivel").value); if(isFinite(h)&&h>0) cur=ratingFit.a*Math.pow(h,ratingFit.b); }
+  if(isFinite(cur) && isFinite(umbral) && cur>=umbral){
+    msgs.push(`Caudal actual ${fmt(cur,2)} m³/s ≥ umbral (${fmt(umbral,1)}).`); sev=Math.max(sev,2); }
+
+  // 2) velocidad de subida entre las dos últimas mediciones
+  const series=state.sessions.filter(s=>isFinite(s.calc.Q))
+    .map(s=>({t:new Date(s.fecha).getTime(),Q:s.calc.Q})).filter(d=>isFinite(d.t)).sort((a,b)=>a.t-b.t);
+  if(series.length>=2){
+    const A=series[series.length-2], B=series[series.length-1], dh=(B.t-A.t)/3600000;
+    if(dh>0 && B.Q>A.Q){
+      const rate=(B.Q-A.Q)/dh;
+      msgs.push(`Subiendo +${fmt(rate,2)} m³/s por hora.`); sev=Math.max(sev,1);
+      if(isFinite(umbral) && B.Q<umbral && rate>0){
+        const horas=(umbral-B.Q)/rate;
+        if(horas<=6){ msgs.push(`A este ritmo alcanza el umbral en ~${fmt(horas,1)} h.`); sev=Math.max(sev,2); }
+      }
+    }
+  }
+
+  // 3) pronóstico GEOGLOWS contra umbral y períodos de retorno
+  if(lastForecastPeak!=null){
+    if(isFinite(umbral) && lastForecastPeak>=umbral){ msgs.push(`Pronóstico GEOGLOWS hasta ${fmt(lastForecastPeak,1)} m³/s.`); sev=Math.max(sev,2); }
+    const hit=rpExceed(lastForecastPeak);
+    if(hit){
+      const s = hit.yr>=25?3 : hit.yr>=5?2 : 1;
+      msgs.push(`Pronóstico supera el período de retorno de ${hit.yr} años.`); sev=Math.max(sev,s);
+    }
+  }
+
+  if(sev===0 || msgs.length===0){ banner.style.display="none"; return; }
+  banner.style.display="block";
+  inner.className="inner lvl-"+lvlClass[sev];
+  let html=`<span style="font-size:1.1rem">⚠</span><span><b>${lvlName[sev]}.</b> ${msgs.join(" ")}</span>`;
+  if(sev>=2){
+    const txt=`⚠ ${lvlName[sev]} de caudal en ${$("#lugar").value||"el arroyo"}: `+
+      (isFinite(cur)?`Q≈${fmt(cur,1)} m³/s`:``)+(lastForecastPeak!=null?` · pronóstico ${fmt(lastForecastPeak,1)} m³/s`:``)+
+      `. Tomar precauciones. (Afluente)`;
+    html+=`<a href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener" `+
+      `style="margin-left:auto;background:#25d366;color:#073f1e;padding:7px 12px;border-radius:9px;font-weight:700;text-decoration:none;white-space:nowrap">Avisar por WhatsApp</a>`;
+    inner.style.flexWrap="wrap"; inner.style.alignItems="center";
+  }
+  inner.innerHTML=html;
+}
+
+/* ============================================================
+   GEOGLOWS (vía proxy Apps Script para evitar CORS)
+   ============================================================ */
+function parseSeries(obj){
+  if(typeof obj!=="object"||!obj) return null;
+  const keys=Object.keys(obj);
+  let timeKey=keys.find(k=>/datetime|time|date/i.test(k) && Array.isArray(obj[k]));
+  if(!timeKey){ // a veces viene anidado en .data
+    if(obj.data) return parseSeries(obj.data);
+    return null;
+  }
+  const times=obj[timeKey];
+  const series=keys.filter(k=>k!==timeKey && Array.isArray(obj[k]) && obj[k].length===times.length)
+    .map(k=>({name:k, values:obj[k].map(Number)}));
+  return {times, series};
+}
+function pickForecastSeries(parsed){
+  if(!parsed||!parsed.series.length) return null;
+  let m=parsed.series.find(s=>/median|mean|flow_avg|^flow$/i.test(s.name));
+  return m || parsed.series[0];
+}
+async function loadGeoglows(){
+  const url=state.settings.scriptUrl.trim();
+  const river=$("#riverId").value.trim();
+  if(!river){ toast("Escribe un River ID"); return; }
+  if(!url){ $("#geoStatus").textContent="Configura primero la URL del Web App en Ajustes (también sirve de proxy)."; return; }
+  $("#geoStatus").textContent="Cargando pronóstico…";
+  try{
+    const fRes=await fetch(`${url}?action=geoglows&product=forecast&river_id=${encodeURIComponent(river)}`);
+    const fJson=await fRes.json();
+    const parsed=parseSeries(fJson);
+    const fc=pickForecastSeries(parsed);
+    if(!fc){ throw new Error("Formato de pronóstico no reconocido"); }
+    lastForecastPeak=Math.max(...fc.values.filter(isFinite));
+    renderGeoChart(parsed.times, parsed.series, $("#geoChart"), $("#geoLegend"));
+    $("#geoCard").style.display="block";
+    // return periods
+    try{
+      const rRes=await fetch(`${url}?action=geoglows&product=returnperiods&river_id=${encodeURIComponent(river)}`);
+      const rJson=await rRes.json();
+      renderReturnPeriods(rJson);
+    }catch(e){ $("#retCard").style.display="none"; }
+    state.settings.riverId=river;
+    if(!state.settings.rivers) state.settings.rivers=[];
+    if(state.settings.rivers.indexOf(river)<0) state.settings.rivers.push(river);
+    saveSettings(); renderRiverSelect(); $("#riverSelect").value=river;
+    $("#geoStatus").textContent=`Pico de pronóstico: ${fmt(lastForecastPeak,1)} m³/s.`;
+    refreshAlert();
+  }catch(err){
+    $("#geoStatus").innerHTML=`No se pudo cargar GEOGLOWS (${escapeHtml(err.message||err)}). `+
+      `Verifica el River ID y que el Web App esté desplegado para “cualquiera”. `+
+      `Siempre puedes consultarlo en el <a href="${VIEWER_URL}" target="_blank" rel="noopener">HydroViewer</a>.`;
+  }
+}
+function renderGeoChart(times,series,mount,legend){
+  const W=700,H=340,padL=52,padR=18,padT=22,padB=46;
+  if(!times||!series.length){ mount.innerHTML=`<div class="empty">Sin datos.</div>`; return; }
+  const allVals=series.flatMap(s=>s.values).filter(isFinite);
+  const qMax=Math.max(...allVals)*1.1||1, qMin=0;
+  const sx=linScale(0,times.length-1,padL,W-padR), sy=linScale(qMin,qMax,H-padB,padT);
+  let s=svgEl(W,H);
+  for(let i=0;i<=4;i++){ const qv=qMax*i/4,y=sy(qv);
+    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#eef2f3"/>`;
+    s+=`<text x="${padL-8}" y="${(y+4).toFixed(1)}" font-size="11" text-anchor="end" fill="#7e949b" font-family="ui-monospace,monospace">${qv.toFixed(1)}</text>`; }
+  legend.innerHTML="";
+  // sombra de incertidumbre si hay upper/lower
+  const up=series.find(s=>/upper|max|p75|q75/i.test(s.name));
+  const lo=series.find(s=>/lower|min|p25|q25/i.test(s.name));
+  if(up&&lo){
+    let band="";
+    up.values.forEach((v,i)=>{ band+=(i?"L":"M")+sx(i).toFixed(1)+" "+sy(v).toFixed(1)+" "; });
+    for(let i=lo.values.length-1;i>=0;i--){ band+="L"+sx(i).toFixed(1)+" "+sy(lo.values[i]).toFixed(1)+" "; }
+    band+="Z";
+    s+=`<path d="${band}" fill="rgba(27,158,224,.14)" stroke="none"/>`;
+  }
+  const med=pickForecastSeries({series,times});
+  series.forEach((ser,k)=>{
+    if(up&&(ser===up||ser===lo)) return;
+    const col = ser===med ? "#0f7d8c" : COLORS[(k+2)%COLORS.length];
+    const wdt = ser===med ? 2.6 : 1.4;
+    let path=""; ser.values.forEach((v,i)=>{ path+=(i?"L":"M")+sx(i).toFixed(1)+" "+(isFinite(v)?sy(v):sy(0)).toFixed(1)+" "; });
+    s+=`<path d="${path}" fill="none" stroke="${col}" stroke-width="${wdt}"/>`;
+    legend.innerHTML+=`<span><span class="sw" style="background:${col}"></span>${escapeHtml(ser.name)}</span>`;
+  });
+  // etiquetas de tiempo (primeras/medias/últimas)
+  [0,Math.floor(times.length/2),times.length-1].forEach(i=>{
+    const d=new Date(times[i]); const lbl=isNaN(d)?String(times[i]).slice(5,10):d.toLocaleDateString("es",{day:"2-digit",month:"2-digit"});
+    s+=`<text x="${sx(i).toFixed(1)}" y="${(H-padB+16).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#7e949b" font-family="ui-monospace,monospace">${lbl}</text>`;
+  });
+  s+=`<text x="${(padL-40)}" y="14" font-size="10.5" fill="#4b6470" font-weight="700">Q m³/s</text>`;
+  s+=`</svg>`; mount.innerHTML=s;
+}
+function renderReturnPeriods(json){
+  // tolerante: scalars o arrays, claves con número de años
+  let obj=json; if(json && json.data) obj=json.data;
+  const items=[];
+  Object.keys(obj||{}).forEach(k=>{
+    const m=k.match(/(\d+)/);
+    if(/return|rp|periodo|period/i.test(k) && m){
+      let v=obj[k]; if(Array.isArray(v)) v=v[v.length-1];
+      v=Number(v); if(isFinite(v)) items.push({yr:+m[1], val:v});
+    }
+  });
+  items.sort((a,b)=>a.yr-b.yr);
+  lastReturnPeriods=items;
+  const r2=items.find(i=>i.yr===2); lastReturn2 = r2? r2.val : null;
+  const list=$("#retList");
+  if(items.length===0){ $("#retCard").style.display="none"; return; }
+  $("#retCard").style.display="block";
+  list.innerHTML=items.map(i=>`<div class="ret-line"><span class="yr">Período de retorno ${i.yr} años</span><span class="val">${fmt(i.val,1)} m³/s</span></div>`).join("");
+}
+
+function renderRiverSelect(){
+  const sel=$("#riverSelect"); if(!sel) return;
+  const list=state.settings.rivers||[];
+  sel.innerHTML = list.map(id=>`<option value="${id}">Tramo ${id}</option>`).join("")+
+    `<option value="__new">+ otro ID…</option>`;
+  const cur=$("#riverId").value;
+  if(cur && list.indexOf(cur)>=0) sel.value=cur;
+}
+
+/* ============================================================
+   CALIBRACIÓN: caudal medido vs GEOGLOWS retrospectivo
+   ============================================================ */function nearestModeled(times, values, targetMs){
+  let best=null, bestDiff=Infinity;
+  for(let i=0;i<times.length;i++){
+    const t=new Date(times[i]).getTime(); if(isNaN(t)) continue;
+    const diff=Math.abs(t-targetMs);
+    if(diff<bestDiff && isFinite(values[i])){ bestDiff=diff; best={t,v:values[i],diff}; }
+  }
+  return best;
+}
+async function calibrateGeoglows(){
+  const url=state.settings.scriptUrl.trim();
+  const river=$("#riverId").value.trim();
+  const out=$("#calibOut");
+  if(!url||!river){ out.textContent="Necesitas la URL del Web App y un River ID."; return; }
+  const measured=state.sessions.filter(s=>isFinite(s.calc.Q)&&s.fecha);
+  if(measured.length===0){ out.textContent="Guarda al menos un aforo con fecha para calibrar."; return; }
+  out.textContent="Descargando registro histórico de GEOGLOWS (puede tardar)…";
+  try{
+    const r=await fetch(`${url}?action=geoglows&product=retrospective&river_id=${encodeURIComponent(river)}&resolution=monthly`);
+    const j=await r.json();
+    const parsed=parseSeries(j);
+    if(!parsed||!parsed.series.length) throw new Error("formato no reconocido");
+    const ser=parsed.series.find(s=>/median|mean|flow|^\d/i.test(s.name))||parsed.series[0];
+    const ratios=[], rows=[];
+    measured.forEach(s=>{
+      const m=nearestModeled(parsed.times, ser.values, new Date(s.fecha).getTime());
+      if(m && m.v>0){
+        const ratio=s.calc.Q/m.v; ratios.push(ratio);
+        rows.push(`<div class="ret-line"><span class="yr">${prettyDate(s.fecha)}</span>`+
+          `<span class="val">medido ${fmt(s.calc.Q,2)} / modelo ${fmt(m.v,2)} = ${fmt(ratio,2)}×</span></div>`);
+      }
+    });
+    if(ratios.length===0) throw new Error("sin coincidencias de fecha en el modelo");
+    ratios.sort((a,b)=>a-b);
+    const bias=ratios[Math.floor(ratios.length/2)]; // mediana
+    state.settings.bias=bias; saveSettings();
+    out.innerHTML=`<b>Factor de sesgo local (mediana): ${fmt(bias,2)}×</b> — tus aforos son en promedio `+
+      `${bias>=1?fmt(bias,2)+" veces mayores que":"el "+fmt(bias*100,0)+"% de"} el modelo.<br>`+
+      `Se guardó para interpretar el pronóstico.<div style="margin-top:8px">${rows.join("")}</div>`;
+  }catch(err){
+    out.innerHTML=`No se pudo calibrar (${escapeHtml(err.message||err)}). El registro retrospectivo puede ser pesado o el formato del servicio cambió.`;
+  }
+}
+
+/* ============================================================
+   SYNC A GOOGLE SHEETS
+   ============================================================ */
+async function syncNow(){
+  const url=state.settings.scriptUrl.trim();
+  if(!url){ $("#syncStatus").textContent="Falta la URL del Web App."; return; }
+  const pending=state.sessions.filter(s=>!s.synced);
+  if(pending.length===0){ $("#syncStatus").textContent="No hay nada pendiente."; toast("Todo sincronizado"); return; }
+  $("#syncStatus").textContent=`Enviando ${pending.length}…`;
+  try{
+    const res=await fetch(url,{ method:"POST", body:JSON.stringify({action:"append",sessions:pending}) });
+    const json=await res.json();
+    if(json && json.ok){
+      pending.forEach(s=>s.synced=true); saveSessions(); renderHistory();
+      $("#syncStatus").textContent=`Listo: ${pending.length} medición(es) en Sheets.`; toast("Sincronizado");
+    } else throw new Error((json&&json.error)||"respuesta inesperada");
+  }catch(err){
+    $("#syncStatus").textContent="Error de sincronización: "+(err.message||err)+". Revisa el despliegue (acceso: cualquiera).";
+  }
+}
+async function testConn(){
+  const url=state.settings.scriptUrl.trim();
+  if(!url){ $("#syncStatus").textContent="Falta la URL."; return; }
+  $("#syncStatus").textContent="Probando…";
+  try{ const r=await fetch(url); const j=await r.json(); $("#syncStatus").textContent=(j&&j.msg)?("OK · "+j.msg):"Conexión OK."; toast("Conexión OK"); }
+  catch(e){ $("#syncStatus").textContent="No respondió: "+(e.message||e); }
+}
+async function pullSheets(){
+  const url=state.settings.scriptUrl.trim();
+  if(!url){ toast("Falta la URL"); return; }
+  try{
+    const r=await fetch(`${url}?action=read`); const j=await r.json();
+    const n=(j.rows&&j.rows.length>1)?(j.rows.length-1):0;
+    toast(`Sheets contiene ${n} resumen(es).`);
+  }catch(e){ toast("No se pudo leer Sheets"); }
+}
+function exportCsv(){
+  const head=["session_id","lugar","fecha","nivel_cm","distancia_m","profundidad_cm","velocidad_ms","caudal_m3s_sesion","area_m2_sesion","vel_media_ms"];
+  const lines=[head.join(",")];
+  state.sessions.forEach(s=>{
+    (s.rows||[]).forEach(r=>{
+      lines.push([s.id, csv(s.lugar), s.fecha, (s.nivel==null?"":s.nivel), r.d, r.p, r.v, fmt(s.calc.Q,3), fmt(s.calc.area,3), fmt(s.calc.vmean,3)].join(","));
+    });
+  });
+  const blob=new Blob([lines.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="afluente_mediciones.csv"; a.click(); toast("CSV exportado");
+}
+function csv(s){ s=String(s); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+
+/* ============================================================
+   NAVEGACIÓN + ARRANQUE
+   ============================================================ */
+function go(view){
+  document.querySelectorAll("section.view").forEach(s=>s.classList.remove("active"));
+  $("#v-"+view).classList.add("active");
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active",b.dataset.go===view));
+  if(view==="perfil") recompute();
+  if(view==="historico") renderHistory();
+  window.scrollTo({top:0,behavior:"instant"});
+}
+function updateNet(){
+  const on=navigator.onLine;
+  $("#netDot").classList.toggle("on",on);
+  $("#netTxt").textContent=on?"en línea":"sin conexión";
+}
+
+/* ============================================================
+   DATOS DE PRUEBA — perfil tipo arroyo de montaña (Atitlán)
+   ============================================================ */
+function demoCrossSection(){
+  // distancia(m) · profundidad(cm) · velocidad(m/s)
+  // perfil asimétrico, ancho ~4.8 m, prof. máx ~42 cm, V media ~0.33 m/s
+  return [
+    {d:"0.0", p:"0",  v:"0.00"},
+    {d:"0.6", p:"15", v:"0.18"},
+    {d:"1.2", p:"28", v:"0.32"},
+    {d:"1.8", p:"38", v:"0.45"},
+    {d:"2.4", p:"42", v:"0.52"},
+    {d:"3.0", p:"36", v:"0.48"},
+    {d:"3.6", p:"25", v:"0.35"},
+    {d:"4.2", p:"12", v:"0.20"},
+    {d:"4.8", p:"0",  v:"0.00"}
+  ];
+}
+function fillDemoForm(){
+  $("#lugar").value = "Río Quiscab — puente bajo";
+  $("#fecha").value = nowLocalISO();
+  $("#nivel").value = "35";
+  if(!state.settings.umbral){
+    state.settings.umbral = "1.5";
+    $("#umbral").value = "1.5";
+    saveSettings();
+  }
+  state.rows = demoCrossSection();
+  renderRows(); recompute(); saveDraft();
+  go("captura");
+  toast("Formulario lleno con datos de prueba");
+}
+function seedHistory(){
+  // 6 mediciones con niveles distintos para construir curva Q–h
+  // factor escala el perfil base; nivel relativo determina amplitud
+  var base = demoCrossSection();
+  var lugares = ["Río Quiscab — puente bajo","Río Panajachel — vado","Quebrada San Buenaventura"];
+  var hoy = new Date();
+  var samples = [
+    {dh:-180, nivel:18, scale:0.55, lugar:lugares[0]},
+    {dh:-120, nivel:24, scale:0.72, lugar:lugares[0]},
+    {dh: -75, nivel:31, scale:0.88, lugar:lugares[1]},
+    {dh: -45, nivel:38, scale:1.05, lugar:lugares[0]},
+    {dh: -20, nivel:46, scale:1.22, lugar:lugares[2]},
+    {dh:  -5, nivel:52, scale:1.40, lugar:lugares[1]}
+  ];
+  var added = 0;
+  samples.forEach(function(s){
+    var rows = base.map(function(r){
+      var pCm = Number(r.p)*s.scale;
+      var vMs = Number(r.v)*Math.sqrt(s.scale); // Manning-ish: v ~ R^(2/3) → crece más lento que profundidad
+      return { d:r.d, p: pCm.toFixed(0), v: vMs.toFixed(2) };
+    });
+    var saved = state.rows;
+    state.rows = rows;
+    var res = computeDischarge(rows);
+    state.rows = saved;
+    if(!isFinite(res.Q)) return;
+    var f = new Date(hoy.getTime() + s.dh*24*3600*1000);
+    var iso = new Date(f.getTime() - f.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    var umbral = num(state.settings.umbral);
+    state.sessions.unshift({
+      id: "demo_"+f.getTime().toString(36),
+      lugar: s.lugar,
+      fecha: iso,
+      nivel: s.nivel,
+      rows: rows,
+      calc: { Q:res.Q, area:res.area, vmean:res.vmean, width:res.width },
+      umbral: isFinite(umbral)?umbral:null,
+      alerta: isFinite(res.Q)&&isFinite(umbral)&&res.Q>=umbral,
+      synced: false,
+      createdAt: new Date().toISOString()
+    });
+    added++;
+  });
+  saveSessions(); renderHistory(); renderRating(); refreshAlert();
+  toast(added+" mediciones de prueba agregadas");
+  autoSync(); // envío inmediato a Sheets si hay conexión
+}
+
+function init(){
+  load();
+  if(!state.settings.rivers || state.settings.rivers.length===0){
+    state.settings.rivers=["710039205","710064995"]; saveSettings();
+  }
+  $("#fecha").value=nowLocalISO();
+  $("#scriptUrl").value=state.settings.scriptUrl||"";
+  $("#umbral").value=state.settings.umbral||"";
+  $("#riverId").value=state.settings.riverId||state.settings.rivers[0]||"";
+  renderRiverSelect();
+  loadDraft();
+  if(state.rows.length===0) for(let i=0;i<5;i++) state.rows.push(blankRow());
+  renderRows(); recompute(); renderHistory(); renderRating(); updateNet();
+
+  // eventos
+  document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",()=>go(b.dataset.go)));
+  ["#lugar","#fecha","#nivel"].forEach(sel=>$(sel).addEventListener("input",()=>{ saveDraft(); refreshAlert(); }));
+  $("#addRow").addEventListener("click",()=>{ state.rows.push(blankRow()); renderRows(); });
+  $("#clearRows").addEventListener("click",()=>{ if(confirm("¿Vaciar la tabla?")){ state.rows=[]; for(let i=0;i<5;i++) state.rows.push(blankRow()); renderRows(); recompute(); }});
+  $("#saveSession").addEventListener("click",saveCurrentSession);
+  $("#selAll").addEventListener("click",()=>{ const cbs=[...document.querySelectorAll("#histList input[type=checkbox]")]; const target=!cbs.every(c=>c.checked); cbs.forEach(c=>c.checked=target); updateComparison(); });
+  $("#exportCsv").addEventListener("click",exportCsv);
+  $("#predNivel").addEventListener("input",predictQ);
+  $("#openViewer").addEventListener("click",()=>window.open(VIEWER_URL,"_blank","noopener"));
+  $("#loadGeo").addEventListener("click",loadGeoglows);
+  $("#riverSelect").addEventListener("change",e=>{
+    if(e.target.value==="__new"){ $("#riverId").value=""; $("#riverId").focus(); }
+    else { $("#riverId").value=e.target.value; }
+  });
+  $("#calibBtn").addEventListener("click",calibrateGeoglows);
+  $("#syncNow").addEventListener("click",syncNow);
+  $("#testConn").addEventListener("click",testConn);
+  $("#pullSheets").addEventListener("click",pullSheets);
+  $("#wipe").addEventListener("click",()=>{ if(confirm("Esto borra TODAS las mediciones locales. ¿Seguro?")){ state.sessions=[]; saveSessions(); renderHistory(); toast("Datos borrados"); }});
+  $("#umbral").addEventListener("input",e=>{ state.settings.umbral=e.target.value; saveSettings(); recompute(); renderHistory(); predictQ(); });
+  $("#scriptUrl").addEventListener("input",e=>{ state.settings.scriptUrl=e.target.value; saveSettings(); });
+  $("#resetUrl").addEventListener("click",()=>{
+    state.settings.scriptUrl = SCRIPT_URL;
+    $("#scriptUrl").value = SCRIPT_URL;
+    saveSettings();
+    toast("URL restaurada");
+  });
+  $("#fillDemo").addEventListener("click",fillDemoForm);
+  $("#seedHistory").addEventListener("click",()=>{
+    if(state.sessions.length && !confirm("Esto agregará 6 mediciones de prueba al histórico (no borra las existentes). ¿Continuar?")) return;
+    seedHistory();
+  });
+  window.addEventListener("online",()=>{ updateNet(); autoSync(); });
+  window.addEventListener("offline",updateNet);
+
+  // intento de sincronización inicial al abrir la app
+  setTimeout(autoSync, 800);
+}
+async function autoSync(){
+  if(!navigator.onLine || !state.settings.scriptUrl.trim()) return;
+  if(!state.sessions.some(s=>!s.synced)) return;
+  try{ await syncNow(); }catch(e){}
+}
+document.addEventListener("DOMContentLoaded",init);
+</script>
+</body>
+</html>
